@@ -1,5 +1,5 @@
 import datetime as datetime
-from os import mkdir
+from os import mkdir, listdir, path
 import numpy as np
 import cv2 as cv
 import time
@@ -174,6 +174,45 @@ class CameraCV:  # (Camera):
                 return True
         if key == ord('e') or key == 243:
             return True
+        if key == ord('p'):
+            cv.waitKey(-1)
+        if key == ord('k'):
+            print("Cameras properties:")
+            print(f"\tframe time: {self.frame_time}")
+            print(f"\tFPS: {self.camera_fps}")
+            print(f"\twidth: {self.camera_width}")
+            print(f"\theight: {self.camera_height}")
+            print(f"\texposure: {self.exposure}")
+            print(f"\texposure mode: {self.exposure_mode}")
+            print(f"\toffset_x: {self.offset_x}")
+            print(f"\toffset_y: {self.offset_y}")
+            print(f"\tpixel format: {self.pixel_format}")
+            print('\n')
+        if key == ord('+'):
+            self.camera_fps = self.camera_fps + 5
+            print(f"New FPS: {self.camera_fps}")
+        if key == ord('-'):
+            self.camera_fps = self.camera_fps - 5
+            print(f"New FPS: {self.camera_fps}")
+        if key == ord('>'):
+            self.exposure = self.exposure + 1
+            print(f"New exposure: {self.exposure}")
+        if key == ord('<'):
+            self.exposure = self.exposure - 1
+            print(f"New exposure: {self.exposure}")
+        if key == ord('['):
+            self.offset_x = self.offset_x - 1
+            print(f"New offset_x: {self.offset_x}")
+        if key == ord(']'):
+            self.offset_x = self.offset_x + 1
+            print(f"New offset_x: {self.offset_x}")
+        if key == ord('l'):
+            self.offset_y = self.offset_y - 1
+            print(f"New offset_y: {self.offset_y}")
+        if key == ord(';'):
+            self.offset_y = self.offset_y + 1
+            print(f"New offset_y: {self.offset_y}")
+
         return True
 
     def show_video(self):
@@ -190,8 +229,11 @@ class CameraCV:  # (Camera):
                 break
             try:
                 t0 = time.time()
-                cv.imshow("video", self.next_frame)
+                frame = self.next_frame
                 dt = time.time() - t0
+                self.put_cam_param_on_frame(frame)
+                cv.imshow("video", frame)
+
                 if dt > self.frame_time:
                     continue
                 time.sleep(self.frame_time - dt)
@@ -236,11 +278,117 @@ class CameraCV:  # (Camera):
             except RuntimeError as ex:
                 print(f"{ex.args}")
 
+    def put_cam_param_on_frame(self, frame):
+        font = cv.FONT_HERSHEY_SIMPLEX
+        line_type = cv.LINE_AA
+        thickness = 2
+        color = (244, 192, 85)
+        cv.putText(frame, 'play / stop: "p"', (5, 20), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, 'save frame: "s"', (5, 40), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'FPS: {self.camera_fps}', (5, 60), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'exposure: {self.exposure}', (5, 80), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'exposure mode: {self.exposure_mode}', (5, 100), font, 0.6, color, thickness, line_type,
+                   False)
+        cv.putText(frame, f'offset_x: {self.offset_x}', (5, 120), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'offset_y: {self.offset_y}', (5, 140), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'pixel_format: {self.pixel_format}', (5, 160), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'height: {self.camera_height}', (5, 180), font, 0.6, color, thickness, line_type, False)
+        cv.putText(frame, f'width: {self.camera_width}', (5, 200), font, 0.6, color, thickness, line_type, False)
+
+    @staticmethod
+    def monocular_camera_calibration(chess_board_img_dir: str = None, chess_board_size: tuple = None):
+        # getting all the images names
+        img_names = listdir(chess_board_img_dir)
+        if len(img_names) == 0:
+            raise RuntimeError("chess board images folder are empty!")
+
+        # array that contains abs paths of all the images
+        images = [path.join(chess_board_img_dir, img_name) for img_name in img_names]
+        # getting images width and height
+        img = cv.imread(images[0])
+        frame_size = (img.shape[1], img.shape[0])
+        print(f'{chess_board_size=}')
+        print(f'{frame_size=}')
+
+        # termination criteria
+        criteria = (cv.TERM_CRITERIA_EPS + cv.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+        # prepare object points, like (0,0,0), (1,0,0), (2,0,0) ..., (6,5,0)
+        obj_points = np.zeros((chess_board_size[0] * chess_board_size[1], 3), np.float32)
+        obj_points[:, :2] = np.mgrid[0:chess_board_size[0], 0:chess_board_size[1]].T.reshape(-1, 2)
+        # arrays to store object points and image points from all the images
+        obj_points_arr = []
+        img_points_arr = []
+
+        #### FIND CORNERS ####
+
+        for image in images:
+            print(image)
+            img = cv.imread(image)
+            gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+
+            # find the chess board corners
+            ret, corners = cv.findChessboardCorners(gray, chess_board_size, None)
+            # if found, add objects points, image points (after refining them)
+            if ret is True:
+                obj_points_arr.append(obj_points)
+                corners_2 = cv.cornerSubPix(gray, corners, (11, 11), (-1, -1), criteria)
+                img_points_arr.append(corners)
+                # draw adn displat the corners
+                cv.drawChessboardCorners(img, chess_board_size, corners_2, ret)
+                cv.imshow('img', img)
+                cv.waitKey(1000)
+        cv.destroyAllWindows()
+
+        #### CALIBRATION ####
+
+        ret, camera_matrix, dist, r_vecs, t_vecs = cv.calibrateCamera(obj_points_arr, img_points_arr, frame_size,
+                                                                    None, None)
+        print("Camera Calibrated: ", ret)
+        print("\nCamera Matrix:\n", camera_matrix)
+        print("\nDistortion Parameters:\n", dist)
+        print("\nRotation Vectors:\n", r_vecs)
+        print("\nTranslation Vectors:\n", t_vecs)
+
+        #### UNDISTORTION ####
+
+        img = cv.imread(images[0])
+        h, w = img.shape[:2]
+        new_camera_matrix, roi = cv.getOptimalNewCameraMatrix(camera_matrix, dist, (w, h), 1, (w, h))
+
+        # undistort
+        dst = cv.undistort(img, camera_matrix, dist, None, new_camera_matrix)
+        # crop the image
+        x, y, w, h = roi
+        dst = dst[y: y + h, x: x + w]
+        cv.imwrite(path.join(chess_board_img_dir, 'undistorted_img.png'), dst)
+
+        # undistort with remapping
+        map_x, map_y = cv.initUndistortRectifyMap(camera_matrix, dist, None, new_camera_matrix, (w, h), 5)
+        dst = cv.remap(img, map_x, map_y, cv.INTER_LINEAR)
+        # crop the image
+        x, y, w, h = roi
+        dst = dst[y: y + h, x: x + w]
+        cv.imwrite(path.join(chess_board_img_dir, 'undistorted_img_with_remapping.png'), dst)
+
+        # Reprojection Error
+        mean_error = 0.0
+        for i in range(len(obj_points_arr)):
+            img_points_arr_2, _ = cv.projectPoints(obj_points_arr[i], r_vecs[i], t_vecs[i], camera_matrix, dist)
+            error = cv.norm(img_points_arr[i], img_points_arr_2, cv.NORM_L2) / len(img_points_arr_2)
+            mean_error += error
+        mean_error /= len(obj_points_arr)
+        print(f"\ntotal error: {mean_error}")
+        print('\n\n')
+
 
 def camera_cv_test():
-    cam = CameraCV()
-    cam.show_video()
+    # cam = CameraCV()
+    # cam.show_video()
     # cam.record_frames()
+    img_folder = 'C:/Users/daniil/PycharmProjects/Odometry/devices/cameras/chess_board_images'
+    chess_board_size = (15, 9)
+
+    CameraCV.monocular_camera_calibration(chess_board_img_dir=img_folder, chess_board_size=chess_board_size)
 
 
 if __name__ == "__main__":
