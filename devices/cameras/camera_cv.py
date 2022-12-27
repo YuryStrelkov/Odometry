@@ -381,6 +381,39 @@ class CameraCV:  # (Camera):
         print('\n\n')
 
 
+    @staticmethod
+    def binocular_camera_calibration(stereo_images_dir: str = None):
+        stereo_images_dir = stereo_images_dir if stereo_images_dir is not None else "./binocular_calibration"
+        image_left_dir = path.join(stereo_images_dir, "stereo_left/image_left")
+        image_right_dir = path.join(stereo_images_dir, "stereo_right/image_right")
+        try:
+            for directory in [stereo_images_dir, image_left_dir, image_right_dir]:
+                if not path.exists(directory):
+                    mkdir(directory)
+
+            cap1 = cv.VideoCapture(0)
+            cap2 = cv.VideoCapture(1)
+
+            num = 0
+            while cap1.isOpened() and cap2.isOpened():
+                ret1, img1 = cap1.read()
+                ret2, img2 = cap2.read()
+
+                k = cv.waitKey(5)
+                if k == 27:
+                    break
+                elif k == ord('s'):
+                    cv.imwrite(path.join(image_left_dir), f"{num}.png", img1)
+                    cv.imwrite(path.join(image_left_dir), f"{num}.png", img2)
+                    print('images saved!')
+                    num += 1
+                cv.imshow('Img 1', img1)
+                cv.imshow('Img 2', img2)
+        except Exception as ex:
+            print(ex)
+            exit(-1)
+
+
 def camera_cv_test():
     # cam = CameraCV()
     # cam.show_video()
